@@ -20,7 +20,7 @@
 #define N_CHANNEL 3
 #define BUFSIZE 255
 
-#define debug(args...)
+#define debug(args...) printf(args)
 #define info(args...)   syslog(LOG_INFO, args)
 #define error(args...)  syslog(LOG_ERR, args)
 #define fatal(args...) ({ \
@@ -36,6 +36,7 @@ typedef struct ChannelData {
 } ChannelData;
 
 ChannelData channels[N_CHANNEL];
+bool channel_status[N_CHANNEL];
 
 /// Use sysfs to export the specified GPIO
 void gpio_export(const char* gpio) {
@@ -124,6 +125,7 @@ int main(int argc, char** argv) {
     int sync_fd = gpio_open(argv[3], "value");
 
     memset(channels, 0, sizeof(channels));
+    memset(channel_status, 0, sizeof(channel_status));
     memset(fds, 0, sizeof(fds));
 
     GPIO_POLL.fd = irq_fd;
@@ -298,6 +300,14 @@ int main(int argc, char** argv) {
                 continue;
             }
         }
+
+        if ((rx_buf[1] & (0x10 << 0))) {
+            debug("\n\nUSB Enabled\n\n");
+        }
+        else {
+            debug("\n\nUSB Disabled\n\n");
+        }
+
         retries = 0;
 
         delay();
