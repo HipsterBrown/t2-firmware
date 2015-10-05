@@ -36,7 +36,7 @@ typedef struct ChannelData {
 } ChannelData;
 
 ChannelData channels[N_CHANNEL];
-bool channel_status[N_CHANNEL];
+uint8_t channel_status[N_CHANNEL];
 
 /// Use sysfs to export the specified GPIO
 void gpio_export(const char* gpio) {
@@ -96,6 +96,17 @@ struct pollfd fds[N_POLLFDS];
 void delay() {
     volatile int i = 1000;
     while(i--);
+}
+
+void close_connection(uint8_t channel) {
+
+    info("Closing connection %d\n", channel);
+    close(CONN_POLL(channel).fd);
+    CONN_POLL(channel).fd = -1;
+
+    channels[channel].out_length = 0;
+    // Re-enable events on a new connection
+    SOCK_POLL(channel).events = POLLIN;
 }
 
 int main(int argc, char** argv) {
@@ -238,15 +249,8 @@ int main(int argc, char** argv) {
             if (to_close || CONN_POLL(i).revents & POLLHUP
                          || CONN_POLL(i).revents & POLLERR
                          || CONN_POLL(i).revents & POLLRDHUP) {
-                info("Closing connection %d\n", i);
-                close(CONN_POLL(i).fd);
-                CONN_POLL(i).fd = -1;
-
-                channels[i].out_length = 0;
+                close_connection(i);
                 writable &= ~(1 << i);
-
-                // Re-enable events on a new connection
-                SOCK_POLL(i).events = POLLIN;
                 channels_open &= ~(1<<i);
 
                 continue;
@@ -301,6 +305,27 @@ int main(int argc, char** argv) {
             }
         }
 
+        for (int i=0; i<N_CHANNEL; i++) {
+            uint8_t new_status = (rx_buf[1] & (0x10 << i));
+            uint8_t old_status = channel_status[i];
+            // If the status hasn't changed
+            if (new_status == old_status) {
+                // Make no changes to the polling
+                continue;
+            }
+            // If the new status has the channel enabled
+            else if (new_status == 1) {
+                // We should start listening for connect events
+                SOCK_POLL(i).events = POLLIN;
+            }
+            // If the new status disables the channel
+            else {
+                close_connection(i);
+                writable &= ~(1 << i);
+                channels_open &= ~(1<<i);
+                SOCK_POLL(i).events = 0;
+            }
+        }
         if ((rx_buf[1] & (0x10 << 0))) {
             debug("\n\nUSB Enabled\n\n");
         }
