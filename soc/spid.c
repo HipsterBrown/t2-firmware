@@ -325,6 +325,8 @@ int main(int argc, char** argv) {
                 channels_open &= ~(1<<i);
                 SOCK_POLL(i).events = 0;
             }
+
+            channel_status[i] = new_status;
         }
         if ((rx_buf[1] & (0x10 << 0))) {
             debug("\n\nUSB Enabled\n\n");
